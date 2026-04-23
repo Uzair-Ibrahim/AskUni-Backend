@@ -16,7 +16,8 @@ def search_timetable(
     room: Optional[str] = None,
     teacher: Optional[str] = None,
     subject: Optional[str] = None,
-    day: Optional[str] = None
+    day: Optional[str] = None,
+    section: Optional[str] = None
 ):
     session = Session()
     try:
@@ -26,33 +27,31 @@ def search_timetable(
         if teacher: query = query.filter(Timetable.teacher_name.ilike(f"%{teacher}%"))
         if subject: query = query.filter(Timetable.subject.ilike(f"%{subject}%"))
         if day: query = query.filter(Timetable.day.ilike(f"%{day}%"))
+        if section: query = query.filter(Timetable.section.ilike(f"%{section}%")) # 👈 Section filter
             
         results = query.all()
         
         if not results:
             return {"message": "Bhai, is search par koi class nahi mili."}
             
-        # 🧠 ASLI JADOO: Data ko Din (Day) ke hisab se group karna
         organized_schedule = {}
         
         for c in results:
-            din = c.day # Monday, Tuesday etc.
-            
-            # Agar is din ka khana (key) nahi bana, toh pehle banao
+            din = c.day 
             if din not in organized_schedule:
                 organized_schedule[din] = []
                 
-            # Us din ke andar class ki detail daalo
             organized_schedule[din].append({
                 "time": c.time,
                 "subject": c.subject,
+                "section": c.section,
                 "teacher": c.teacher_name,
                 "room": c.room_number
             })
             
         return {
             "total_results": len(results),
-            "schedule_by_day": organized_schedule # Ab data grouped aayega
+            "schedule_by_day": organized_schedule 
         }
         
     except Exception as e:
