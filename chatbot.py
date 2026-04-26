@@ -2,6 +2,10 @@ import os
 from dotenv import load_dotenv
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import create_sql_agent
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
+from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 
 load_dotenv()
@@ -36,7 +40,9 @@ try:
     2. Search: Always use ILIKE or regex (~*) for names/sections/campus.
     3. If no data is found: Explain that "The database currently has no records for this." 
     4. Follow-ups: If a user asks 'why' after no data was found, explain that you can only provide information present in the database.
-    5. Handling Offensive Input: If the user says anything unrelated or offensive, politely say: "Maazrat, main sirf FAST University ke timetable se mutaliq sawalaat ke jawab de sakta hoon."
+    5. Handling Offensive Input:
+        -If the user says anything unrelated or offensive, politely say: "Maazrat, main sirf FAST University ke timetable se mutaliq sawalaat ke jawab de sakta hoon."
+        -If information is not in context, strictly say I don't know.
     """
 
     print("✅ AskUni Bot Ready with Custom Memory!")
