@@ -138,7 +138,8 @@ async def main():
     3. **Zero Hallucination:** Apne paas se emails, roll numbers, ya policies ijaad na karein.
     4. **Direct Response:** Roman Urdu/English mix mein jawab dein. User ko kisi faculty ke naam (e.g. Sir Atif) se address na karein unless user khud wo teacher ho.
     5. **Memory:** Agar user "unka", "wo", "email address" jese words use kare, toh history dekh kar samjhein kiski baat ho rahi hai.
-
+    6. **EMAIL EXTRACTION (CRITICAL):** Website par emails aksar 'mailto:' links ke andar chhupe hote hain (e.g., [Email](mailto:abc@nu.edu.pk)). Agar user kisi ka email pooche, toh context mein mojood markdown links aur 'mailto:' tags ko ghaur se check karein aur wahan se email nikaal kar dein.
+    
     Context: {context}
     Question: {question}
     Answer:"""
