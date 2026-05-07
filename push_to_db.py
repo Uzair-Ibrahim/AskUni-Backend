@@ -8,42 +8,47 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL missing in environment variables")
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
-session = SessionLocal()
 
-try:
-    print("✅ Database se connection successful!")
-    
-    # 🧹 ZAROORI STEP: Purana table aur uski kharab settings delete kar do
-    Base.metadata.drop_all(bind=engine)
-    
-    # 🏗️ Naya saaf table banao
+
+def replace_timetable_from_csv(csv_path="cleaned_timetable.csv"):
     Base.metadata.create_all(bind=engine)
-    
-    # CSV se saaf data load karo
-    df = pd.read_csv("cleaned_timetable.csv")
-    df = df.fillna("Unknown") 
+    df = pd.read_csv(csv_path).fillna("Unknown")
 
-    print(f"⏳ {len(df)} rows database mein ja rahi hain...")
+    session = SessionLocal()
+    try:
+        session.query(Timetable).delete(synchronize_session=False)
 
-    for index, row in df.iterrows():
-        new_entry = Timetable(
-            day=str(row['Day']),
-            time=f"{row['Start_Time']} - {row['End_Time']}",
-            subject=str(row['Subject']),
-            teacher_name=str(row['Teacher']),
-            room_number=str(row['Room']),
-            section=str(row['Section']),
-            campus=str(row['Campus'])
-        )
-        session.add(new_entry)
+        for _, row in df.iterrows():
+            new_entry = Timetable(
+                day=str(row["Day"]),
+                time=f"{row['Start_Time']} - {row['End_Time']}",
+                subject=str(row["Subject"]),
+                teacher_name=str(row["Teacher"]),
+                room_number=str(row["Room"]),
+                section=str(row["Section"]),
+                campus=str(row["Campus"]),
+            )
+            session.add(new_entry)
 
-    session.commit()
-    print("🚀 KAMYABI! Main aur City campus dono ka data successfully Godaam mein save ho gaya.")
+        session.commit()
+        return len(df)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
-except Exception as e:
-    session.rollback()
-    print(f"❌ Masla aa gaya: {e}")
-finally:
-    session.close()
+
+if __name__ == "__main__":
+    try:
+        print("✅ Database se connection successful!")
+        rows = replace_timetable_from_csv("cleaned_timetable.csv")
+        print(f"⏳ {rows} rows database mein ja rahi hain...")
+        print("🚀 KAMYABI! Main aur City campus dono ka data successfully Godaam mein save ho gaya.")
+    except Exception as e:
+        print(f"❌ Masla aa gaya: {e}")
