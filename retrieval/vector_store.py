@@ -3,6 +3,7 @@ retrieval/vector_store.py
 ==========================
 FAISS-based vector store with metadata support.
 Stores chunk embeddings and allows filtered search.
+Uses FastEmbed (ONNX) to avoid PyTorch memory bloat (~400MB saved).
 """
 
 import os
@@ -14,20 +15,20 @@ from knowledge.chunker import Chunk
 
 EMBED_MODEL = os.getenv(
     "RAG_EMBED_MODEL",
-    "sentence-transformers/all-MiniLM-L6-v2"   # smaller, faster to download/load
+    "sentence-transformers/all-MiniLM-L6-v2"
 )
 
 
 def _import_deps():
     try:
-        from sentence_transformers import SentenceTransformer
+        from fastembed import TextEmbedding
         import faiss
         import numpy as np
-        return SentenceTransformer, faiss, np
+        return TextEmbedding, faiss, np
     except ImportError as e:
         raise ImportError(
             f"RAG dependency missing: {e}\n"
-            "Run: pip install sentence-transformers faiss-cpu numpy"
+            "Run: pip install fastembed faiss-cpu numpy"
         ) from e
 
 
@@ -40,23 +41,27 @@ class VectorStore:
     """
 
     def __init__(self, chunks: List[Chunk], model_name: str = EMBED_MODEL):
-        SentenceTransformer, faiss, np = _import_deps()
+        TextEmbedding, faiss, np = _import_deps()
 
-        print(f"  [VectorStore] Loading embedding model: {model_name}")
-        self._model = SentenceTransformer(model_name)
+        print(f"  [VectorStore] Loading FastEmbed model (ONNX): {model_name}")
+        self._model = TextEmbedding(model_name=model_name)
         self._chunks = chunks
         self._np = np
         self._faiss = faiss
 
         texts = [c.text for c in chunks]
         print(f"  [VectorStore] Embedding {len(texts)} chunks ...")
-        embeddings = self._model.encode(
-            texts,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=True,   # cosine via inner product
-            batch_size=16,
-        )
+        
+        # fastembed returns a generator of numpy arrays
+        embeddings_list = list(self._model.embed(texts))
+        
+        # Stack into a single 2D matrix
+        embeddings = np.vstack(embeddings_list).astype(np.float32)
+
+        # Normalize for cosine similarity via inner product
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1
+        embeddings = embeddings / norms
 
         dim = embeddings.shape[1]
         self._index = faiss.IndexFlatIP(dim)
@@ -72,24 +77,18 @@ class VectorStore:
     ) -> List[Tuple[Chunk, float]]:
         """
         Search for chunks relevant to the query.
-
-        Args:
-            query: The search query text
-            top_k: Number of results to return
-            domain_filter: If set, only return chunks from this domain
-            min_score: Minimum cosine similarity threshold
-
-        Returns:
-            List of (Chunk, score) tuples, sorted by score descending
         """
-        # If domain filter is active, we search more candidates then filter
         search_k = top_k * 3 if domain_filter else top_k
 
-        q_vec = self._model.encode(
-            [query],
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-        )
+        # Embed single query
+        q_vec = list(self._model.embed([query]))[0].astype(self._np.float32)
+        q_vec = q_vec.reshape(1, -1)
+        
+        # Normalize
+        norm = self._np.linalg.norm(q_vec)
+        if norm > 0:
+            q_vec = q_vec / norm
+
         scores, indices = self._index.search(q_vec, min(search_k, len(self._chunks)))
 
         results = []
@@ -117,10 +116,6 @@ class VectorStore:
         domain_filter: Optional[str] = None,
         min_score: float = 0.20,
     ) -> List[Tuple[Chunk, float]]:
-        """
-        Search with multiple query variants and merge results.
-        Useful when query expansion generates several search strings.
-        """
         seen = set()
         all_results = []
 
@@ -132,14 +127,13 @@ class VectorStore:
                     seen.add(chunk_id)
                     all_results.append((chunk, score))
 
-        # Sort by score descending
         all_results.sort(key=lambda x: x[1], reverse=True)
         return all_results[:top_k]
 
     def encode_query(self, query: str):
-        """Encode a query for external use (e.g., hybrid retrieval)."""
-        return self._model.encode(
-            [query],
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-        )[0]
+        """Encode a query for external use."""
+        q_vec = list(self._model.embed([query]))[0].astype(self._np.float32)
+        norm = self._np.linalg.norm(q_vec)
+        if norm > 0:
+            q_vec = q_vec / norm
+        return q_vec

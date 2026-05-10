@@ -2,10 +2,9 @@
 retrieval/hybrid.py
 ====================
 Hybrid retrieval engine combining:
-  1. Dense retrieval (FAISS + sentence-transformers)
+  1. Dense retrieval (FAISS + fastembed)
   2. Sparse retrieval (BM25 keyword matching)
   3. Reciprocal Rank Fusion (RRF) to merge results
-  4. Cross-encoder re-ranking for final precision
 
 This is the core retrieval improvement over the original system.
 """
@@ -23,39 +22,6 @@ DENSE_TOP_K = int(os.getenv("RAG_DENSE_TOP_K", "15"))
 BM25_TOP_K = int(os.getenv("RAG_BM25_TOP_K", "15"))
 FINAL_TOP_K = int(os.getenv("RAG_FINAL_TOP_K", "6"))
 RRF_K = 60  # Reciprocal Rank Fusion constant
-USE_RERANKER = os.getenv("RAG_USE_RERANKER", "false").lower() == "true"
-
-
-# ─── RE-RANKER ────────────────────────────────────────────────────────────────
-
-_reranker = None
-_reranker_loaded = False
-
-
-def _get_reranker():
-    """Lazy-load the cross-encoder re-ranker."""
-    global _reranker, _reranker_loaded
-    if _reranker_loaded:
-        return _reranker
-    _reranker_loaded = True
-
-    if not USE_RERANKER:
-        print("  [Hybrid] Re-ranker disabled via RAG_USE_RERANKER=false")
-        return None
-
-    try:
-        from sentence_transformers import CrossEncoder
-        model_name = os.getenv(
-            "RAG_RERANKER_MODEL",
-            "cross-encoder/ms-marco-MiniLM-L-6-v2"
-        )
-        print(f"  [Hybrid] Loading re-ranker: {model_name}")
-        _reranker = CrossEncoder(model_name)
-        print(f"  [Hybrid] Re-ranker ready")
-        return _reranker
-    except Exception as e:
-        print(f"  [Hybrid] Re-ranker unavailable ({e}), using RRF scores only")
-        return None
 
 
 # ─── RECIPROCAL RANK FUSION ──────────────────────────────────────────────────
@@ -93,13 +59,11 @@ def reciprocal_rank_fusion(
 
 class HybridRetriever:
     """
-    Combines dense (vector) and sparse (BM25) retrieval with optional re-ranking.
+    Combines dense (vector) and sparse (BM25) retrieval with RRF fusion.
 
     Pipeline:
         Query → [Dense Search] + [BM25 Search]
               → RRF Fusion
-              → Optional metadata filtering
-              → Optional cross-encoder re-ranking
               → Top-K final chunks
     """
 
@@ -163,22 +127,7 @@ class HybridRetriever:
                 )
             return []
 
-        # ── Stage 3: Cross-encoder re-ranking (if available) ──────────────────
-        reranker = _get_reranker()
-        if reranker and len(fused) > top_k:
-            # Take top candidates for re-ranking (limit to avoid slow re-ranking)
-            candidates = fused[:min(len(fused), top_k * 3)]
-
-            pairs = [(query, chunk.text) for chunk, _score in candidates]
-            try:
-                rerank_scores = reranker.predict(pairs)
-                reranked = list(zip([c for c, _ in candidates], rerank_scores))
-                reranked.sort(key=lambda x: x[1], reverse=True)
-                return [chunk for chunk, _score in reranked[:top_k]]
-            except Exception as e:
-                print(f"  [Hybrid] Re-ranking failed ({e}), using RRF scores")
-
-        # Fallback: return top-k by RRF score
+        # ── Stage 3: Return top-k by RRF score ─────────────────────────────────
         return [chunk for chunk, _score in fused[:top_k]]
 
 
