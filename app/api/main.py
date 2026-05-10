@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import or_
 
@@ -164,11 +165,8 @@ async def startup_preload_rag():
         print("ℹ️ RAG preload disabled — will lazy-load on first RAG query.")
         return
 
-    import asyncio
-    print("⏳ Pre-loading RAG pipeline at startup ...")
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, rag._ensure_loaded)
-    print("✅ RAG pipeline pre-loaded — first query will be fast!")
+    print("⏳ Pre-loading RAG pipeline at startup (in background) ...")
+    _start_rag_loading()
 
 # ─── SYSTEM CONTEXT (unchanged from chatbot.py) ───────────────────────────────
 
