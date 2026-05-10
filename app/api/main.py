@@ -44,9 +44,25 @@ from app.services.free_slot_service import get_teacher_free_slots, get_section_f
 from app.services.exam_seating import replace_exam_seating_from_pdf, get_seating_by_roll
 from app.services.exam_seating import get_seating_by_roll, format_seating_response
 import re
+import asyncio
 
 
 load_dotenv()
+
+
+async def run_blocking_with_timeout(func, *args, timeout: float = 12.0, **kwargs):
+    """Run a blocking function in the default executor with an asyncio timeout.
+
+    Returns the function result or raises asyncio.TimeoutError.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: func(*args, **kwargs)),
+            timeout,
+        )
+    except asyncio.TimeoutError:
+        raise
 
 # ─── APP SETUP ────────────────────────────────────────────────────────────────
 
@@ -691,19 +707,27 @@ async def chat(req: ChatRequest):
                 f"--- NEW QUESTION ---\nUser: {question}"
             )
             try:
-                response  = agent_executor.invoke({"input": full_prompt})
-                bot_reply = response["output"]
-            except Exception:
-                if agent_executor_fallback is None:
-                    agent_executor_fallback = build_sql_agent(llm_gemini)
                 try:
-                    response = agent_executor_fallback.invoke({"input": full_prompt})
-                    bot_reply = response["output"]
+                    response = await run_blocking_with_timeout(agent_executor.invoke, {"input": full_prompt}, timeout=12.0)
+                    bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                 except Exception:
-                    if agent_executor_fallback_groq is None:
-                        agent_executor_fallback_groq = build_sql_agent(llm_groq)
-                    response = agent_executor_fallback_groq.invoke({"input": full_prompt})
-                    bot_reply = response["output"]
+                    if agent_executor_fallback is None:
+                        agent_executor_fallback = build_sql_agent(llm_gemini)
+                    try:
+                        response = await run_blocking_with_timeout(agent_executor_fallback.invoke, {"input": full_prompt}, timeout=12.0)
+                        bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
+                    except Exception:
+                        if agent_executor_fallback_groq is None:
+                            agent_executor_fallback_groq = build_sql_agent(llm_groq)
+                        try:
+                            response = await run_blocking_with_timeout(agent_executor_fallback_groq.invoke, {"input": full_prompt}, timeout=12.0)
+                            bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
+                        except asyncio.TimeoutError:
+                            bot_reply = "Model timeout. Please try again later."
+                        except Exception:
+                            bot_reply = "Model error. Please try again later."
+            except asyncio.TimeoutError:
+                bot_reply = "Model timeout. Please try again later."
 
         # ── FREE SLOT ──────────────────────────────────────────────────────────
         elif query_type == QueryType.FREE_SLOT:
@@ -720,7 +744,12 @@ async def chat(req: ChatRequest):
                 else:
                     bot_reply = "Knowledge base load ho raha hai. Thori dair baad dobara try karein."
             else:
-                bot_reply = rag.ask(question, chat_history, language_hint)
+                try:
+                    bot_reply = await run_blocking_with_timeout(rag.ask, question, chat_history, language_hint, timeout=20.0)
+                except asyncio.TimeoutError:
+                    bot_reply = "Knowledge query timed out. Please try again later."
+                except Exception:
+                    bot_reply = "Knowledge backend error. Please try again later."
 
         update_history(session_id, question, bot_reply)
 
