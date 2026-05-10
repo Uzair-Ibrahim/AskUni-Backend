@@ -23,7 +23,7 @@ DENSE_TOP_K = int(os.getenv("RAG_DENSE_TOP_K", "15"))
 BM25_TOP_K = int(os.getenv("RAG_BM25_TOP_K", "15"))
 FINAL_TOP_K = int(os.getenv("RAG_FINAL_TOP_K", "6"))
 RRF_K = 60  # Reciprocal Rank Fusion constant
-USE_RERANKER = os.getenv("RAG_USE_RERANKER", "true").lower() == "true"
+USE_RERANKER = os.getenv("RAG_USE_RERANKER", "false").lower() == "true"
 
 
 # ─── RE-RANKER ────────────────────────────────────────────────────────────────

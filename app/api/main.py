@@ -708,19 +708,19 @@ async def chat(req: ChatRequest):
             )
             try:
                 try:
-                    response = await run_blocking_with_timeout(agent_executor.invoke, {"input": full_prompt}, timeout=12.0)
+                    response = await run_blocking_with_timeout(agent_executor.invoke, {"input": full_prompt}, timeout=8.0)
                     bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                 except Exception:
                     if agent_executor_fallback is None:
                         agent_executor_fallback = build_sql_agent(llm_gemini)
                     try:
-                        response = await run_blocking_with_timeout(agent_executor_fallback.invoke, {"input": full_prompt}, timeout=12.0)
+                        response = await run_blocking_with_timeout(agent_executor_fallback.invoke, {"input": full_prompt}, timeout=8.0)
                         bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                     except Exception:
                         if agent_executor_fallback_groq is None:
                             agent_executor_fallback_groq = build_sql_agent(llm_groq)
                         try:
-                            response = await run_blocking_with_timeout(agent_executor_fallback_groq.invoke, {"input": full_prompt}, timeout=12.0)
+                            response = await run_blocking_with_timeout(agent_executor_fallback_groq.invoke, {"input": full_prompt}, timeout=8.0)
                             bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                         except asyncio.TimeoutError:
                             bot_reply = "Model timeout. Please try again later."
@@ -745,7 +745,7 @@ async def chat(req: ChatRequest):
                     bot_reply = "Knowledge base load ho raha hai. Thori dair baad dobara try karein."
             else:
                 try:
-                    bot_reply = await run_blocking_with_timeout(rag.ask, question, chat_history, language_hint, timeout=20.0)
+                    bot_reply = await run_blocking_with_timeout(rag.ask, question, chat_history, language_hint, timeout=12.0)
                 except asyncio.TimeoutError:
                     bot_reply = "Knowledge query timed out. Please try again later."
                 except Exception:
