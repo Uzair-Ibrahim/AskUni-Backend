@@ -195,8 +195,8 @@ RULES:
    - **Extension:** [extension number]
    - [Any additional info the user asked for — biography, courses, research, etc.]
 3. NEVER invent or guess emails, phone numbers, extensions, or designations.
-4. If multiple faculty members appear in context, pick the one most relevant to the question.
-5. If a name is misspelled, try to match the closest faculty member in context and clarify.
+4. If multiple faculty members appear in context, pick the EXACT one asked by the user.
+5. CRITICAL: If the user asks for a specific name (e.g., "Abdullah Shaikh") and the context only has a different person with a similar first name (e.g., "Abdullah Siddiqui"), DO NOT assume it's a typo. You MUST state that you do not have information about the requested person. Do not provide information about a different person.
 
 {language_instruction}
 
