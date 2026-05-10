@@ -20,7 +20,7 @@ google-generativeai==0.8.6
 groq==0.37.1
 
 # RAG
-fastembed==0.3.4
+fastembed==0.8.0
 faiss-cpu==1.13.2
 numpy==2.4.4
 
