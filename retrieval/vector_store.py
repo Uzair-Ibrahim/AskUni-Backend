@@ -44,7 +44,7 @@ class VectorStore:
         TextEmbedding, faiss, np = _import_deps()
 
         print(f"  [VectorStore] Loading FastEmbed model (ONNX): {model_name}")
-        self._model = TextEmbedding(model_name=model_name)
+        self._model = TextEmbedding(model_name=model_name, threads=1)
         self._chunks = chunks
         self._np = np
         self._faiss = faiss
@@ -53,7 +53,8 @@ class VectorStore:
         print(f"  [VectorStore] Embedding {len(texts)} chunks ...")
         
         # fastembed returns a generator of numpy arrays
-        embeddings_list = list(self._model.embed(texts))
+        # Use a small batch_size to prevent memory spikes on 1GB RAM
+        embeddings_list = list(self._model.embed(texts, batch_size=16))
         
         # Stack into a single 2D matrix
         embeddings = np.vstack(embeddings_list).astype(np.float32)
