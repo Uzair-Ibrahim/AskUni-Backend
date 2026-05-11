@@ -55,10 +55,15 @@ def chunk_documents(documents: List[Document]) -> List[Chunk]:
 
         all_chunks.extend(chunks)
 
-    # Filter out empty / too-short chunks
-    all_chunks = [c for c in all_chunks if len(c.text.strip()) >= MIN_CHUNK_CHARS]
+    # Filter out empty / too-short chunks, but NEVER filter out faculty profiles
+    filtered_chunks = []
+    for c in all_chunks:
+        if c.metadata.get("domain") == "faculty":
+            filtered_chunks.append(c)
+        elif len(c.text.strip()) >= MIN_CHUNK_CHARS:
+            filtered_chunks.append(c)
 
-    return all_chunks
+    return filtered_chunks
 
 
 # ─── FACULTY CHUNKING ────────────────────────────────────────────────────────

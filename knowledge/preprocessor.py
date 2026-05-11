@@ -162,21 +162,13 @@ def _extract_faculty_documents(part2_text: str, docs: List[Document]):
     Each '### Faculty:' block becomes one document.
     Department headers and overviews become separate documents.
     """
-    current_department = ""
-    current_dept_url = ""
-
     # Split by department headers
     dept_pattern = re.compile(r"^## Department:\s*(.+)$", re.MULTILINE)
     dept_splits = dept_pattern.split(part2_text)
 
     # dept_splits = [preamble, dept1_name, dept1_body, dept2_name, dept2_body, ...]
-    it = iter(dept_splits[1:])
-    for dept_name in it:
-        dept_body = next(it, "")
-        dept_name = dept_name.strip()
-        dept_url_match = re.search(r"\*\*URL:\*\*\s*(https?://\S+)", dept_body)
-        dept_url = dept_url_match.group(1) if dept_url_match else ""
-
+    
+    def process_faculty_body(dept_name: str, dept_body: str, dept_url: str = ""):
         # Extract department overview (text before first ### Faculty:)
         faculty_start = dept_body.find("### Faculty:")
         if faculty_start > 0:
@@ -198,7 +190,7 @@ def _extract_faculty_documents(part2_text: str, docs: List[Document]):
         faculty_pattern = re.compile(r"(^### Faculty:\s*.+)$", re.MULTILINE)
         faculty_splits = faculty_pattern.split(dept_body)
 
-        fit = iter(faculty_splits[1:] if faculty_splits else [])
+        fit = iter(faculty_splits[1:] if len(faculty_splits) > 1 else [])
         for fac_header in fit:
             fac_body = next(fit, "")
             fac_header = fac_header.strip()
@@ -243,6 +235,19 @@ def _extract_faculty_documents(part2_text: str, docs: List[Document]):
                     "keywords": keywords,
                 }
             ))
+
+    # Process the preamble (faculty listed before any department header)
+    if dept_splits[0].strip():
+        process_faculty_body("Unknown", dept_splits[0])
+
+    # Process each department
+    it = iter(dept_splits[1:])
+    for dept_name in it:
+        dept_body = next(it, "")
+        dept_name = dept_name.strip()
+        dept_url_match = re.search(r"\*\*URL:\*\*\s*(https?://\S+)", dept_body)
+        dept_url = dept_url_match.group(1) if dept_url_match else ""
+        process_faculty_body(dept_name, dept_body, dept_url)
 
 
 def _extract_faculty_keywords(name: str, text: str) -> List[str]:
