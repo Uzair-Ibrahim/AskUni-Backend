@@ -143,9 +143,9 @@ def build_sql_agent(llm):
         max_execution_time=38.0,
     )
 
-agent_executor = build_sql_agent(llm_groq)
-agent_executor_fallback_gemini = None
-agent_executor_fallback_gpt = None
+agent_executor = build_sql_agent(llm_gemini)        # Primary: Gemini (free, high limit)
+agent_executor_fallback_groq = build_sql_agent(llm_groq)    # Fallback 1: Groq (unlimited)
+agent_executor_fallback_gpt = None                   # Fallback 2: GPT (last resort)
 
 rag    = RAGPipeline(ask_llm)
 router = QueryRouter()
@@ -176,7 +176,17 @@ You have access to the chat history provided in the prompt, so you can understan
 follow-up questions like 'why', 'who', or 'more details'.
 
 1. Language: Reply in English if the user writes English; otherwise reply in Roman Urdu using Latin letters only (no Urdu/Arabic script).
-2. Search: Always use ILIKE with wildcards (e.g., ILIKE '%bcs-4b%') or regex (~*) for names/sections/campus because exact matches will fail.
+2. Search: Always use ILIKE with wildcards for names/sections/campus.
+   CRITICAL — Section Format: Database mein sections ALWAYS dash ke saath hain:
+   BCS-4B, BCS-2C, BBA-3A, etc.
+   If user writes:
+   - 'bcs4b'  → search ILIKE '%BCS-4B%'
+   - 'bcs 4b' → search ILIKE '%BCS-4B%'  
+   - 'bcs4c'  → search ILIKE '%BCS-4C%'
+   - 'bba2a'  → search ILIKE '%BBA-2A%'
+   ALWAYS insert dash between department code and number+letter.
+   Pattern: [LETTERS][NUMBER][LETTER] → [LETTERS]-[NUMBER][LETTER]
+   Examples: BCS4B → BCS-4B, BBA2A → BBA-2A, BCE3C → BCE-3C
 3. If no data is found: Explain that "The database currently has no records for this."
 4. If user asks for timetable or classes or class:
    - If section is provided, search in that section for whole week
@@ -194,6 +204,11 @@ follow-up questions like 'why', 'who', or 'more details'.
    - If information is not in context, strictly say I don't know.
 7. Schema Rules: DO NOT query non-existent columns. The column for class/subject name is 'subject', NOT 'class_name'. Use ONLY the exact column names provided in the schema.
 8. Use a single concise SQL query whenever possible. Avoid multi-step tool loops.
+9. CRITICAL — COMPLETE DATA: When showing timetable/schedule results, 
+   ALWAYS show ALL days and ALL classes from the query results. 
+   NEVER skip or omit any day or class. 
+   If data has Monday, Tuesday, Wednesday, Thursday, Friday, Saturday — show ALL of them.
+   Do NOT summarize or truncate the results.
 """
 
 # ─── SESSION MEMORY STORE ─────────────────────────────────────────────────────
@@ -651,7 +666,7 @@ async def chat(req: ChatRequest):
     chat_history = get_history(session_id)
     question     = req.message.strip()
 
-    global agent_executor_fallback_gemini
+    global agent_executor_fallback_groq
     global agent_executor_fallback_gpt
 
     try:
@@ -719,10 +734,11 @@ async def chat(req: ChatRequest):
                     bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                     if "Agent stopped" in bot_reply: raise Exception("Hit limits")
                 except Exception:
-                    if agent_executor_fallback_gemini is None:
-                        agent_executor_fallback_gemini = build_sql_agent(llm_gemini)
+                    if agent_executor_fallback_groq is None:
+                        agent_executor_fallback_groq = build_sql_agent(llm_groq)
                     try:
-                        response = await run_blocking_with_timeout(agent_executor_fallback_gemini.invoke, {"input": full_prompt}, timeout=40.0)
+                        response = await run_blocking_with_timeout(agent_executor_fallback_groq.invoke,   # Groq (fallback 1)
+                            {"input": full_prompt}, timeout=40.0)
                         bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                         if "Agent stopped" in bot_reply: raise Exception("Hit limits")
                     except Exception:
