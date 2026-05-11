@@ -79,7 +79,7 @@ app.add_middleware(
         "http://localhost:3000",       # React dev server
         "http://localhost:5173",       # Vite dev server
         "http://localhost:8080",       # Vue dev server
-        os.getenv("FRONTEND_URL", ""), # production frontend URL from .env
+        os.getenv("FRONTEND_URL", "http://localhost:8000") # production frontend URL from .env
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -143,9 +143,9 @@ def build_sql_agent(llm):
         max_execution_time=20.0,
     )
 
-agent_executor = build_sql_agent(llm_gpt)
-agent_executor_fallback = None
-agent_executor_fallback_groq = None
+agent_executor = build_sql_agent(llm_groq)
+agent_executor_fallback_gemini = None
+agent_executor_fallback_gpt = None
 
 rag    = RAGPipeline(ask_llm)
 router = QueryRouter()
@@ -176,7 +176,7 @@ You have access to the chat history provided in the prompt, so you can understan
 follow-up questions like 'why', 'who', or 'more details'.
 
 1. Language: Reply in English if the user writes English; otherwise reply in Roman Urdu using Latin letters only (no Urdu/Arabic script).
-2. Search: Always use ILIKE or regex (~*) for names/sections/campus.
+2. Search: Always use ILIKE with wildcards (e.g., ILIKE '%bcs-4b%') or regex (~*) for names/sections/campus because exact matches will fail.
 3. If no data is found: Explain that "The database currently has no records for this."
 4. If user asks for timetable or classes or class:
    - If section is provided, search in that section for whole week
@@ -192,7 +192,8 @@ follow-up questions like 'why', 'who', or 'more details'.
    - If the user says anything unrelated or offensive, politely say:
      "Maazrat, main sirf FAST University ke timetable se mutaliq sawalaat ke jawab de sakta hoon."
    - If information is not in context, strictly say I don't know.
-7. Use a single concise SQL query whenever possible. Avoid multi-step tool loops.
+7. Schema Rules: DO NOT query non-existent columns. The column for class/subject name is 'subject', NOT 'class_name'. Use ONLY the exact column names provided in the schema.
+8. Use a single concise SQL query whenever possible. Avoid multi-step tool loops.
 """
 
 # ─── SESSION MEMORY STORE ─────────────────────────────────────────────────────
@@ -650,8 +651,8 @@ async def chat(req: ChatRequest):
     chat_history = get_history(session_id)
     question     = req.message.strip()
 
-    global agent_executor_fallback
-    global agent_executor_fallback_groq
+    global agent_executor_fallback_gemini
+    global agent_executor_fallback_gpt
 
     try:
         language_hint = detect_language(question)
@@ -714,23 +715,24 @@ async def chat(req: ChatRequest):
             )
             try:
                 try:
-                    response = await run_blocking_with_timeout(agent_executor.invoke, {"input": full_prompt}, timeout=8.0)
+                    response = await run_blocking_with_timeout(agent_executor.invoke, {"input": full_prompt}, timeout=40.0)
                     bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                 except Exception:
-                    if agent_executor_fallback is None:
-                        agent_executor_fallback = build_sql_agent(llm_gemini)
+                    if agent_executor_fallback_gemini is None:
+                        agent_executor_fallback_gemini = build_sql_agent(llm_gemini)
                     try:
-                        response = await run_blocking_with_timeout(agent_executor_fallback.invoke, {"input": full_prompt}, timeout=8.0)
+                        response = await run_blocking_with_timeout(agent_executor_fallback_gemini.invoke, {"input": full_prompt}, timeout=40.0)
                         bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                     except Exception:
-                        if agent_executor_fallback_groq is None:
-                            agent_executor_fallback_groq = build_sql_agent(llm_groq)
+                        if agent_executor_fallback_gpt is None:
+                            agent_executor_fallback_gpt = build_sql_agent(llm_gpt)
                         try:
-                            response = await run_blocking_with_timeout(agent_executor_fallback_groq.invoke, {"input": full_prompt}, timeout=8.0)
+                            response = await run_blocking_with_timeout(agent_executor_fallback_gpt.invoke, {"input": full_prompt}, timeout=40.0)
                             bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
-                        except asyncio.TimeoutError:
-                            bot_reply = "Model timeout. Please try again later."
-                        except Exception:
+                        except Exception as e:
+                            import traceback
+                            print("\n❌ [SQL AGENT ERROR] All 3 models failed!")
+                            traceback.print_exc()
                             bot_reply = "Model error. Please try again later."
             except asyncio.TimeoutError:
                 bot_reply = "Model timeout. Please try again later."
