@@ -139,8 +139,8 @@ def build_sql_agent(llm):
         db=db_langchain,
         agent_type="tool-calling",
         verbose=True,
-        max_iterations=10,
-        max_execution_time=20.0,
+        max_iterations=20,
+        max_execution_time=38.0,
     )
 
 agent_executor = build_sql_agent(llm_groq)
@@ -717,12 +717,14 @@ async def chat(req: ChatRequest):
                 try:
                     response = await run_blocking_with_timeout(agent_executor.invoke, {"input": full_prompt}, timeout=40.0)
                     bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
+                    if "Agent stopped" in bot_reply: raise Exception("Hit limits")
                 except Exception:
                     if agent_executor_fallback_gemini is None:
                         agent_executor_fallback_gemini = build_sql_agent(llm_gemini)
                     try:
                         response = await run_blocking_with_timeout(agent_executor_fallback_gemini.invoke, {"input": full_prompt}, timeout=40.0)
                         bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
+                        if "Agent stopped" in bot_reply: raise Exception("Hit limits")
                     except Exception:
                         if agent_executor_fallback_gpt is None:
                             agent_executor_fallback_gpt = build_sql_agent(llm_gpt)
