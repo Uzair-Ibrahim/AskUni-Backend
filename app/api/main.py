@@ -79,7 +79,7 @@ app.add_middleware(
         "http://localhost:3000",       # React dev server
         "http://localhost:5173",       # Vite dev server
         "http://localhost:8080",       # Vue dev server
-        os.getenv("FRONTEND_URL", "http://localhost:8000") # production frontend URL from .env
+        os.getenv("FRONTEND_URL", "https://askuni-9pms.onrender.com") # production frontend URL from .env
     ],
     allow_credentials=True,
     allow_methods=["*"],
