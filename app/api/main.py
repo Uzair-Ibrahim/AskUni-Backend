@@ -576,10 +576,10 @@ def handle_seating_query(question: str, language_hint: str) -> Optional[str]:
 # =============================================================================
 # EXISTING ENDPOINTS (completely unchanged)
 # =============================================================================
-
+from fastapi.responses import RedirectResponse
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to AskUni Smart Search! 🚀"}
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/search")
