@@ -579,7 +579,7 @@ def handle_seating_query(question: str, language_hint: str) -> Optional[str]:
 from fastapi.responses import RedirectResponse
 @app.get("/")
 def read_root():
-    return RedirectResponse(url="/docs")
+    return RedirectResponse(url="https://askuni-9pms.onrender.com")
 
 
 @app.get("/search")
