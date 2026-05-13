@@ -101,6 +101,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 OPEN_ROUTER_MODEL = os.getenv("OPEN_ROUTER_MODEL", "minimax/minimax-m2.5-free")
+OPEN_ROUTER_API_KEY = os.getenv("OPEN_ROUTER_API_KEY")
 
 llm_gemini = ChatGoogleGenerativeAI(
     model=GEMINI_MODEL,
@@ -124,14 +125,16 @@ llm_groq = ChatGroq(
     request_timeout=20,
     max_retries=1,
 )
-llm_open_router = ChatOpenAI(
-    model=OPEN_ROUTER_MODEL,
-    api_key=os.getenv("OPEN_ROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api",
-    temperature=0,
-    request_timeout=20,
-    max_retries=1,
-)
+llm_open_router = None
+if OPEN_ROUTER_API_KEY:
+    llm_open_router = ChatOpenAI(
+        api_key=OPEN_ROUTER_API_KEY,
+        model_name=OPEN_ROUTER_MODEL,
+        base_url="https://openrouter.ai/api",
+        temperature=0,
+        request_timeout=20,
+        max_retries=1,
+    )
 
 def ask_llm(prompt):
     """Fallback mechanism: Groq -> GPT -> Gemini -> OpenRouter"""
@@ -144,6 +147,8 @@ def ask_llm(prompt):
             try:
                 return llm_gemini.invoke(prompt)
             except Exception:
+                if llm_open_router is None:
+                    raise
                 return llm_open_router.invoke(prompt)
 
 db_langchain   = SQLDatabase.from_uri(DATABASE_URL)
@@ -160,7 +165,9 @@ def build_sql_agent(llm):
 agent_executor = build_sql_agent(llm_gemini)        # Primary: Gemini (free, high limit)
 agent_executor_fallback_groq = build_sql_agent(llm_groq)    # Fallback 1: Groq (unlimited)
 agent_executor_fallback_gpt = build_sql_agent(llm_gpt)     # Fallback 2: GPT (last resort)
-agent_executor_fallback_open_router = build_sql_agent(llm_open_router)  # Fallback 3: OpenRouter (last resort)
+agent_executor_fallback_open_router = (
+    build_sql_agent(llm_open_router) if llm_open_router is not None else None
+)  # Fallback 3: OpenRouter (last resort)
 
 rag    = RAGPipeline(ask_llm)
 router = QueryRouter()
@@ -594,8 +601,8 @@ def handle_seating_query(question: str, language_hint: str) -> Optional[str]:
 from fastapi.responses import RedirectResponse
 @app.get("/")
 def read_root():
-    return RedirectResponse(url="https://askuni-9pms.onrender.com/docs")
-    # return RedirectResponse(url="http://localhost:8000")
+    # return RedirectResponse(url="https://askuni-9pms.onrender.com/docs")
+    return RedirectResponse(url="http://localhost:8000")
 
 
 @app.get("/search")
@@ -766,15 +773,22 @@ async def chat(req: ChatRequest):
                             bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
                             if "Agent stopped" in bot_reply: raise Exception("Hit limits")
                         except Exception:
-                            if agent_executor_fallback_open_router is None:
-                                agent_executor_fallback_open_router = build_sql_agent(llm_open_router)
-                            try:
-                                response = await run_blocking_with_timeout(agent_executor_fallback_open_router.invoke, {"input": full_prompt}, timeout=40.0)
-                                bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
-                            except Exception as e:
-                                import traceback
-                                print("\n❌ [SQL AGENT ERROR] All 3 models failed!")
-                                traceback.print_exc()
+                            if llm_open_router is not None:
+                                if agent_executor_fallback_open_router is None:
+                                    agent_executor_fallback_open_router = build_sql_agent(llm_open_router)
+                                try:
+                                    response = await run_blocking_with_timeout(
+                                        agent_executor_fallback_open_router.invoke,
+                                        {"input": full_prompt},
+                                        timeout=40.0,
+                                    )
+                                    bot_reply = response["output"] if isinstance(response, dict) and "output" in response else response
+                                except Exception:
+                                    import traceback
+                                    print("\n❌ [SQL AGENT ERROR] All 3 models failed!")
+                                    traceback.print_exc()
+                                    bot_reply = "Model error. Please try again later."
+                            else:
                                 bot_reply = "Model error. Please try again later."
             except asyncio.TimeoutError:
                 bot_reply = "Model timeout. Please try again later."

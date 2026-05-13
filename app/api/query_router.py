@@ -43,7 +43,7 @@ _FREE_SLOT_KEYWORDS = {
     "free kab", "khali", "free hai", "available hai",
     "class nahi", "chhutti",
     # Common typos / short forms
-    "fre", "fr", "freee",
+    "freee",
 }
 
 _FREE_SLOT_REGEX = re.compile(
@@ -159,7 +159,7 @@ class QueryRouter:
         # If knowledge, show sub-type for debugging
         if qt == QueryType.KNOWLEDGE:
             try:
-                from rag_pipeline import understand_query
+                from services.rag_pipeline import understand_query
                 q_info = understand_query(query)
                 desc += f" → {q_info['sub_type'].name}"
                 if q_info.get('domain_filter'):
