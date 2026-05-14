@@ -9,6 +9,9 @@ Usage:
 
     # Or with custom session name:
     python import_seating.py "Seating_Plan_Final_Fall_2026.pdf" "Final Fall 2026"
+
+    # Delete all exam seating rows before insert:
+    python import_seating.py "Seating_Plan_Final_Fall_2026.pdf" "Final Fall 2026" Karachi --replace-all
 """
 
 import sys
@@ -29,9 +32,14 @@ Base.metadata.create_all(bind=engine)
 print("✅ Tables verified/created")
 
 # Args
-pdf_path     = sys.argv[1] if len(sys.argv) > 1 else "Seating_Plan_Sessional_II_Spring_2026.pdf"
-exam_session = sys.argv[2] if len(sys.argv) > 2 else "Sessional II Spring 2026"
-campus       = sys.argv[3] if len(sys.argv) > 3 else "Karachi"
+args = sys.argv[1:]
+replace_all = "--replace-all" in args
+if replace_all:
+    args.remove("--replace-all")
+
+pdf_path     = args[0] if len(args) > 0 else "Student Seating Plan Final Examination Spring 2026"
+exam_session = args[1] if len(args) > 1 else "Final Examination Spring 2026"
+campus       = args[2] if len(args) > 2 else "Karachi"
 
 if not os.path.exists(pdf_path):
     print(f"❌ PDF not found: {pdf_path}")
@@ -51,6 +59,7 @@ try:
         pdf_path=pdf_path,
         session_name=exam_session,
         campus=campus,
+        replace_all=replace_all,
     )
     print(f"\n🎉 Done! {count} records imported into database.")
 

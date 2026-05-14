@@ -29,7 +29,7 @@ DATE_RE      = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2,4}$")
 TIME_RE      = re.compile(r"^\d{1,2}:\d{2}-\d{1,2}:\d{2}$")
 
 SKIP_LINES = {
-    "sessional ii exam spring 2026",
+    "Final Examination Spring 2026",
     "examination department",
     "fast-nuces, karachi campus",
     "photo",
@@ -181,7 +181,7 @@ class SeatingRecord:
 
 def parse_pdf(
     pdf_path: str,
-    exam_session: str = "Sessional II Spring 2026",
+    exam_session: str = "Student Seating Plan Final Examination Spring 2026",
     campus: str = "Karachi",
 ) -> List[SeatingRecord]:
     """Parse entire PDF. Returns list of SeatingRecord."""
@@ -256,8 +256,9 @@ def parse_pdf(
 def replace_exam_seating_from_pdf(
     session: Session,
     pdf_path: str,
-    session_name: str = "Sessional II Spring 2026",
+    session_name: str = "Final Examination Seating Plan Spring 2026",
     campus: str = "Karachi",
+    replace_all: bool = False,
 ) -> int:
     """
     Parse PDF and replace DB records for this exam session + campus.
@@ -269,11 +270,15 @@ def replace_exam_seating_from_pdf(
     records = parse_pdf(pdf_path, session_name, campus)
 
     # Delete stale records
-    print(f"  [Seating] Deleting old records for '{session_name}' …")
-    session.query(ExamSeating).filter(
-        ExamSeating.exam_session == session_name,
-        ExamSeating.campus       == campus,
-    ).delete(synchronize_session=False)
+    if replace_all:
+        print("  [Seating] Deleting all old records …")
+        session.query(ExamSeating).delete(synchronize_session=False)
+    else:
+        print(f"  [Seating] Deleting old records for '{session_name}' …")
+        session.query(ExamSeating).filter(
+            ExamSeating.exam_session == session_name,
+            ExamSeating.campus       == campus,
+        ).delete(synchronize_session=False)
     session.flush()
 
     # Bulk insert in batches
@@ -376,7 +381,7 @@ def format_seating_response(records: List[Dict], language_hint: str = "english")
 
 if __name__ == "__main__":
     import sys
-    pdf = sys.argv[1] if len(sys.argv) > 1 else "Seating_Plan_Sessional_II_Spring_2026.pdf"
+    pdf = sys.argv[1] if len(sys.argv) > 1 else "Student Seating Plan Final Examination Spring 2026"
     recs = parse_pdf(pdf)
     print(f"\nTotal records: {len(recs)}")
     print("\nSample (first 5):")
