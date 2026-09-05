@@ -102,14 +102,25 @@ if engine:
 
 print("\n[*] AskUni API initializing...")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-OPEN_ROUTER_MODEL = os.getenv("OPEN_ROUTER_MODEL", "minimax/minimax-m2.5-free")
-OPEN_ROUTER_API_KEY = os.getenv("OPEN_ROUTER_API_KEY")
+def _environment_value(name: str, default: Optional[str] = None) -> Optional[str]:
+    """Read an environment property safely.
 
-gemini_key = os.getenv("GEMINI_API_KEY")
+    Elastic Beanstalk values are entered manually in the console.  Trimming
+    whitespace here prevents an otherwise valid API key from becoming invalid
+    because of an accidental leading/trailing space.
+    """
+    value = os.getenv(name, default)
+    return value.strip() if value else None
+
+
+DATABASE_URL = _environment_value("DATABASE_URL")
+GITHUB_TOKEN = _environment_value("GITHUB_TOKEN")
+GEMINI_MODEL = _environment_value("GEMINI_MODEL", "gemini-2.0-flash")
+GROQ_MODEL = _environment_value("GROQ_MODEL", "llama-3.1-8b-instant")
+OPEN_ROUTER_MODEL = _environment_value("OPEN_ROUTER_MODEL", "minimax/minimax-m2.5-free")
+OPEN_ROUTER_API_KEY = _environment_value("OPEN_ROUTER_API_KEY")
+
+gemini_key = _environment_value("GEMINI_API_KEY")
 llm_gemini = ChatGoogleGenerativeAI(
     model=GEMINI_MODEL,
     google_api_key=gemini_key or "placeholder_key",
@@ -127,7 +138,7 @@ llm_gpt = ChatOpenAI(
     max_retries=1,
 ) if GITHUB_TOKEN else None
 
-groq_key = os.getenv("GROQ_API_KEY")
+groq_key = _environment_value("GROQ_API_KEY")
 llm_groq = ChatGroq(
     api_key=groq_key or "placeholder_key",
     model_name=GROQ_MODEL,
@@ -147,25 +158,35 @@ if OPEN_ROUTER_API_KEY:
     )
 
 def ask_llm(prompt):
-    """Fallback mechanism: Groq -> GPT -> Gemini -> OpenRouter"""
-    if llm_groq:
+    """Call configured providers in order, retaining safe diagnostics in logs."""
+    providers = (
+        ("Groq", llm_groq),
+        ("GitHub Models", llm_gpt),
+        ("Gemini", llm_gemini),
+        ("OpenRouter", llm_open_router),
+    )
+    failures = []
+
+    for provider_name, client in providers:
+        if client is None:
+            continue
         try:
-            return llm_groq.invoke(prompt)
-        except Exception:
-            pass
-    if llm_gpt:
-        try:
-            return llm_gpt.invoke(prompt)
-        except Exception:
-            pass
-    if llm_gemini:
-        try:
-            return llm_gemini.invoke(prompt)
-        except Exception:
-            pass
-    if llm_open_router:
-        return llm_open_router.invoke(prompt)
-    raise RuntimeError("No LLM client configured.")
+            return client.invoke(prompt)
+        except Exception as exc:
+            # Do not expose provider responses or credentials to API users,
+            # but retain the actual reason in EB logs for diagnosis.
+            detail = f"{type(exc).__name__}: {exc}"
+            failures.append(f"{provider_name} ({detail})")
+            print(f"[LLM Error] {provider_name} failed: {detail}")
+
+    if not failures:
+        raise RuntimeError(
+            "No LLM provider is configured. Set GEMINI_API_KEY, GROQ_API_KEY, "
+            "GITHUB_TOKEN, or OPEN_ROUTER_API_KEY."
+        )
+
+    print("[LLM Error] All configured providers failed: " + " | ".join(failures))
+    raise RuntimeError("All configured LLM providers failed. Check the server logs.")
 
 # app/api/main.py
 
