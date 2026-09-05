@@ -84,8 +84,8 @@ app.add_middleware(
         # "http://localhost:3000",       # React dev server
         # "http://localhost:5173",       # Vite dev server
         # "http://localhost:8080",       # Vue dev server
-        os.getenv("FRONTEND_URL", "http://localhost:8000") # production frontend URL from .env
-        # os.getenv("FRONTEND_URL", "https://askuni-9pms.onrender.com") # production frontend URL from .env
+        # os.getenv("FRONTEND_URL", "http://localhost:8000") # production frontend URL from .env
+        os.getenv("FRONTEND_URL", "https://askuni-9pms.onrender.com") # production frontend URL from .env
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -167,7 +167,16 @@ def ask_llm(prompt):
         return llm_open_router.invoke(prompt)
     raise RuntimeError("No LLM client configured.")
 
-db_langchain = SQLDatabase.from_uri(DATABASE_URL) if DATABASE_URL else None
+# app/api/main.py
+
+try:
+    if DATABASE_URL:
+        db_langchain = SQLDatabase.from_uri(DATABASE_URL)
+    else:
+        db_langchain = None
+except Exception as e:
+    print(f"[DB Error] Failed to initialize SQLDatabase: {e}")
+    db_langchain = None
 def build_sql_agent(llm):
     if db_langchain is None or llm is None:
         return None
