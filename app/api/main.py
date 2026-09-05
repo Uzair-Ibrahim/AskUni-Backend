@@ -732,11 +732,15 @@ def handle_seating_query(question: str, language_hint: str) -> Optional[str]:
 # =============================================================================
 # EXISTING ENDPOINTS (completely unchanged)
 # =============================================================================
-from fastapi.responses import RedirectResponse
 @app.get("/")
 def read_root():
-    return RedirectResponse(url="/docs")
-    # return RedirectResponse(url="http://localhost:8000")
+    """Lightweight Elastic Beanstalk health-check endpoint.
+
+    The platform's default health probe targets `/` and requires a 200 response.
+    Redirecting it to `/docs` returns 307 and can cause a healthy deployment to
+    be rolled back.
+    """
+    return {"status": "ok", "service": "AskUni API", "docs": "/docs"}
 
 
 @app.get("/search")
