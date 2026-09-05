@@ -1,0 +1,11 @@
+.venv
+.env
+__pycache__/
+venv/
+cleaned_timetable.csv
+data/
+*.pyc
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
