@@ -115,8 +115,8 @@ def _environment_value(name: str, default: Optional[str] = None) -> Optional[str
 
 DATABASE_URL = _environment_value("DATABASE_URL")
 GITHUB_TOKEN = _environment_value("GITHUB_TOKEN")
-GEMINI_MODEL = _environment_value("GEMINI_MODEL", "gemini-2.0-flash")
-GROQ_MODEL = _environment_value("GROQ_MODEL", "llama-3.1-8b-instant")
+GEMINI_MODEL = _environment_value("GEMINI_MODEL", "gemini-3.6-flash")
+GROQ_MODEL = _environment_value("GROQ_MODEL", "openai/gpt-oss-20b")
 OPEN_ROUTER_MODEL = _environment_value("OPEN_ROUTER_MODEL", "minimax/minimax-m2.5-free")
 OPEN_ROUTER_API_KEY = _environment_value("OPEN_ROUTER_API_KEY")
 
@@ -124,7 +124,6 @@ gemini_key = _environment_value("GEMINI_API_KEY")
 llm_gemini = ChatGoogleGenerativeAI(
     model=GEMINI_MODEL,
     google_api_key=gemini_key or "placeholder_key",
-    temperature=0,
     timeout=10,
     max_retries=1,
 ) if gemini_key else None
